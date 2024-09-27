@@ -77,41 +77,40 @@ void _addNewTab(TabSetting setting) {
     shell,
     columns: terminal.viewWidth,
     rows: terminal.viewHeight,
-    workingDirectory: setting.directory, // Use directory from settings
+    workingDirectory: setting.directory,
   );
 
-    pty.output
-        .cast<List<int>>()
-        .transform(Utf8Decoder())
-        .listen(terminal.write);
+  pty.output
+      .cast<List<int>>()
+      .transform(Utf8Decoder())
+      .listen(terminal.write);
 
-    pty.exitCode.then((code) {
-      terminal.write('the process exited with exit code $code');
-    });
+  pty.exitCode.then((code) {
+    terminal.write('The process exited with exit code $code');
+  });
 
-    terminal.onOutput = (data) {
-      pty.write(const Utf8Encoder().convert(data));
-    };
+  terminal.onOutput = (data) {
+    pty.write(const Utf8Encoder().convert(data));
+  };
 
-    terminal.onResize = (w, h, pw, ph) {
-      pty.resize(h, w);
-    };
+  terminal.onResize = (w, h, pw, ph) {
+    pty.resize(h, w);
+  };
 
-    final tabData = TabData(
-      terminal: terminal,
-      terminalController: terminalController,
-      pty: pty,
-      title: setting.title, // 获取当前目录名作为标题
-    );
+  final tabData = TabData(
+    terminal: terminal,
+    terminalController: terminalController,
+    pty: pty,
+    title: setting.title,
+    buttons: setting.buttons,
+  );
 
-    setState(() {
-      _tabs.add(tabData);
-      _currentIndex = _tabs.length - 1;
-      _currentIndex = _tabs.length - 1; // 修改这一行，确保切换到新标签页
-      _initializeTabController();
-      _tabController?.index = _currentIndex; // 确保新添加的标签页被选中
-    });
-  }
+  setState(() {
+    _tabs.add(tabData);
+    _initializeTabController();
+    if (_tabController != null) _tabController!.index = _tabs.length - 1;
+  });
+}
 
   void _closeTab(int index) {
     setState(() {
@@ -122,6 +121,26 @@ void _addNewTab(TabSetting setting) {
       _initializeTabController();
     });
   }
+
+  Widget buildCommandButtons(List<CommandButton> buttons) {
+  return Container(
+    height: 50,
+    child: ListView.builder(
+      scrollDirection: Axis.horizontal,
+      itemCount: buttons.length,
+      itemBuilder: (BuildContext context, int index) {
+        return ElevatedButton(
+          onPressed: () {
+            final commandString = buttons[index].command + '\n';
+            final Uint8List command = Uint8List.fromList(utf8.encode(commandString));
+            _tabs[_currentIndex].pty.write(command);
+          },
+          child: Text(buttons[index].name),
+        );
+      },
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -183,7 +202,7 @@ void _addNewTab(TabSetting setting) {
               IconButton(
                 icon: Icon(Icons.add),
                 onPressed:() {
-                  _addNewTab(TabSetting(title: "new tab",directory: "~"));
+                  _addNewTab(TabSetting(title: "new tab",directory: "~", buttons: []));
                 },
               ),
             ],
@@ -192,7 +211,12 @@ void _addNewTab(TabSetting setting) {
       ),
       body: _tabs.isEmpty
           ? Center(child: Text('No Terminals Open'))
-          : TerminalView(
+          : Column(
+      children: [
+        Expanded(
+          child: _tabs.isEmpty
+            ? Center(child: Text('No Terminals Open'))
+            :           TerminalView(
               _tabs[_currentIndex].terminal,
               controller: _tabs[_currentIndex].terminalController,
               autofocus: true,
@@ -214,6 +238,14 @@ void _addNewTab(TabSetting setting) {
                 }
               },
             ),
+        ),
+        if (_tabs.isNotEmpty && _tabs[_currentIndex].buttons.length>0) buildCommandButtons(_tabs[_currentIndex].buttons)
+      ],
+    ),
+          
+          
+          
+        
     );
   }
 }
@@ -223,12 +255,14 @@ class TabData {
   final TerminalController terminalController;
   final Pty pty;
   final String title;
+  final List<CommandButton> buttons;
 
   TabData({
     required this.terminal,
     required this.terminalController,
     required this.pty,
     required this.title,
+    this.buttons = const [],
   });
 }
 

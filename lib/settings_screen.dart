@@ -13,7 +13,10 @@ class _SettingsManagerState extends State<SettingsManager> {
   List<TabSetting> tabs = [];
   final TextEditingController _directoryController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
-  int? editingIndex; // Index of the tab being edited, null if adding new
+  final TextEditingController _buttonNameController = TextEditingController();
+  final TextEditingController _buttonCommandController = TextEditingController();
+  int? editingIndex;
+  int? editingButtonIndex;
 
   @override
   void initState() {
@@ -40,16 +43,13 @@ class _SettingsManagerState extends State<SettingsManager> {
   }
 
   void saveOrUpdateTabSetting() {
-    final newSetting = TabSetting(
-      directory: _directoryController.text,
-      title: _titleController.text,
-    );
     if (editingIndex != null) {
       // Update existing tab
-      tabs[editingIndex!] = newSetting;
+      tabs[editingIndex!].directory = _directoryController.text;
+      tabs[editingIndex!].title = _titleController.text;
     } else {
-      // Add new tab
-      tabs.add(newSetting);
+      // Add new tab with empty buttons list
+      tabs.add(TabSetting(directory: _directoryController.text, title: _titleController.text, buttons: []));
     }
     saveSettings();
     clearInputs();
@@ -59,7 +59,10 @@ class _SettingsManagerState extends State<SettingsManager> {
     setState(() {
       _directoryController.clear();
       _titleController.clear();
-      editingIndex = null; // Reset editing index
+      _buttonNameController.clear();
+      _buttonCommandController.clear();
+      editingIndex = null;
+      editingButtonIndex = null;
     });
   }
 
@@ -68,6 +71,72 @@ class _SettingsManagerState extends State<SettingsManager> {
       _directoryController.text = tabs[index].directory;
       _titleController.text = tabs[index].title;
       editingIndex = index;
+    });
+  }
+
+  void startEditingButton(int tabIndex, int buttonIndex) {
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                title: const Text('Edit Button'),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    TextField(
+                                      controller: _buttonNameController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Button Name',
+                                      ),
+                                    ),
+                                    TextField(
+                                      controller: _buttonCommandController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Command',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                actions: <Widget>[
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      saveOrUpdateButton();
+                                    },
+                                    child: const Text('Save'),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+    setState(() {
+      _buttonNameController.text = tabs[tabIndex].buttons[buttonIndex].name;
+      _buttonCommandController.text = tabs[tabIndex].buttons[buttonIndex].command;
+      editingIndex = tabIndex;
+      editingButtonIndex = buttonIndex;
+    });
+  }
+
+  void saveOrUpdateButton() {
+    final newButton = CommandButton(
+      name: _buttonNameController.text,
+      command: _buttonCommandController.text,
+    );
+    if (editingButtonIndex != null) {
+      tabs[editingIndex!].buttons[editingButtonIndex!] = newButton;
+    } else {
+      tabs[editingIndex!].buttons.add(newButton);
+    }
+    saveSettings();
+    clearInputs();
+    setState(() {
+    });
+  }
+
+  void deleteButton(int tabIndex, int buttonIndex) {
+    setState(() {
+      tabs[tabIndex].buttons.removeAt(buttonIndex);
+      saveSettings();
     });
   }
 
@@ -98,6 +167,49 @@ class _SettingsManagerState extends State<SettingsManager> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
+                        icon: Icon(Icons.add),
+                        onPressed: () {
+                          editingIndex = index;
+                          editingButtonIndex = null;
+                          _buttonNameController.clear();
+                          _buttonCommandController.clear();
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                title: const Text('Add Button'),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    TextField(
+                                      controller: _buttonNameController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Button Name',
+                                      ),
+                                    ),
+                                    TextField(
+                                      controller: _buttonCommandController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Command',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                actions: <Widget>[
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      saveOrUpdateButton();
+                                    },
+                                    child: const Text('Save'),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      ),
+                      IconButton(
                         icon: Icon(Icons.edit),
                         onPressed: () => startEditing(index),
                       ),
@@ -107,22 +219,72 @@ class _SettingsManagerState extends State<SettingsManager> {
                       ),
                     ],
                   ),
+                  onTap: () {
+                    // Show details and buttons for editing
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          title: Text('Edit Buttons for "${tab.title}"'),
+                          content: SizedBox(
+                            height: 300,
+                            width: 300,
+                            child: ListView.builder(
+                              itemCount: tab.buttons.length,
+                              itemBuilder: (context, buttonIndex) {
+                                final button = tab.buttons[buttonIndex];
+                                return ListTile(
+                                  title: Text(button.name),
+                                  subtitle: Text(button.command),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(Icons.edit),
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                          startEditingButton(index, buttonIndex);
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.delete),
+                                        onPressed: () {
+                                          deleteButton(index, buttonIndex);
+                                          Navigator.of(context).pop();
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          actions: <Widget>[
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
                 );
               },
             ),
           ),
           Padding(
-            padding: EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(8.0),
             child: TextField(
               controller: _directoryController,
-              decoration: InputDecoration(labelText: 'Directory'),
+              decoration: const InputDecoration(labelText: 'Directory'),
             ),
           ),
           Padding(
-            padding: EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(8.0),
             child: TextField(
               controller: _titleController,
-              decoration: InputDecoration(labelText: 'Title'),
+              decoration: const InputDecoration(labelText: 'Title'),
             ),
           ),
           ElevatedButton(
